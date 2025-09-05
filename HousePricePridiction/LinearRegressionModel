@@ -1,0 +1,92 @@
+import numpy as np
+import matplotlib.pyplot as plt
+import pandas as pd
+import seaborn as sns
+import sklearn as sk
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LinearRegression
+from sklearn.metrics import mean_squared_error, r2_score
+a=pd.read_csv("/content/BostonHousing.csv")
+df = pd.DataFrame(a)
+print(df.shape)
+print(df.columns)
+print(df.describe())
+print(df.info())
+print(df.head())
+
+print("Mean :",end="\n" )
+print(df.mean())
+print("Median :",end="\n")
+print(df.median())
+print("Maximum:"," ")
+print(df.max())
+print("Standard deviation :",end="\n")
+print(df.std())
+print(df.isnull().sum())
+df = df.fillna(df.mean())
+print(df.isnull().sum())
+X = df.drop(columns=["medv"])
+y = df["medv"]
+print("Features shape:", X.shape)
+print("Target shape:", y.shape)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42
+)
+
+print("Training set size:", X_train.shape)
+print("Testing set size:", X_test.shape)
+
+
+
+model = LinearRegression()
+model.fit(X_train, y_train)
+coefficients = model.coef_
+
+# Intercept (β0)
+intercept = model.intercept_
+
+print("Intercept (β0):", intercept)
+print("Coefficients (β values):")
+for col, coef in zip(X.columns, coefficients):
+    print(f"{col} : {coef}")
+y_pred = model.predict(X_test)
+#print("Coefficients:", model.coef_)
+#print("Intercept:", model.intercept_)
+y_pred = model.predict(X_test)
+
+print("Predicted values:\n", y_pred[:10])  # first 10 predictions
+print("Actual values:\n", y_test[:10].values)
+
+# Mean Squared Error
+mse = mean_squared_error(y_test, y_pred)
+
+# Root Mean Squared Error
+rmse = np.sqrt(mse)
+
+# R² Score
+r2 = r2_score(y_test, y_pred)
+
+print("Mean Squared Error (MSE):", mse)
+print("Root Mean Squared Error (RMSE):", rmse)
+print("R² Score:", r2)
+
+#y_pred = model.predict(X_test)
+
+# 1. Predicted vs Actual
+plt.figure(figsize=(7,5))
+sns.scatterplot(x=y_test, y=y_pred, color="blue", alpha=0.6)
+plt.plot([y_test.min(), y_test.max()], [y_test.min(), y_test.max()],
+         color="red", linestyle="--")  # perfect prediction line
+plt.xlabel("Actual MEDV")
+plt.ylabel("Predicted MEDV")
+plt.title("Predicted vs Actual House Prices")
+plt.show()
+
+# 2. Residual Plot
+residuals = y_test - y_pred
+plt.figure(figsize=(7,5))
+sns.scatterplot(x=y_pred, y=residuals, color="green", alpha=0.6)
+plt.axhline(y=0, color="red", linestyle="--")  # reference line
+plt.xlabel("Predicted MEDV")
+plt.ylabel("Residuals (Actual - Predicted)")
+plt.title("Residual Plot")
+plt.show()
