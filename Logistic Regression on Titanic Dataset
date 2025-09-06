@@ -1,0 +1,66 @@
+import pandas as pd
+import seaborn as sns
+import matplotlib.pyplot as plt
+from sklearn.model_selection import train_test_split
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import accuracy_score,confusion_matrix,classification_report,roc_curve,auc
+from sklearn.metrics import roc_curve, roc_auc_score
+#from sklearn.metrics import roc_curve, auc
+from sklearn.preprocessing import LabelEncoder
+#step1. load dataset
+# Loads Seaborn’s Titanic dataset into a DataFrame
+df=sns.load_dataset('titanic')
+
+# 2) Keep only the required columns (as per experiment)
+df=df[['pclass','age','sex','survived']]
+
+#3)Handle missing values:here we fill with median value
+df["age"]=df["age"].fillna(df["age"].median())  ## Replace NaN ages with the median age
+# Drop rows where 'sex' or 'survived' might be missing (rare in this dataset)
+df = df.dropna(subset=["sex", "survived"])  # Ensures clean target & categorical values
+
+# 4) Encode 'sex' (categorical) -> numeric
+# Map female->0, male->1 (consistent with the sample approach in your handout)
+df["sex"]=df["sex"].map({"female":0, "male":1}).astype(int)
+# 5) Separate features (X) and target (y)
+X=df[["pclass","age","sex"]]
+y = df["survived"].astype(int) # Target variable (0 = No, 1 = Yes)
+
+# 6) Train-test split
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42,stratify=y)
+
+# test_size=0.20 -> 20% test data
+# random_state=42 -> reproducible split
+# stratify=y -> keeps survival class balance similar in train & test
+
+# 7) Build & train the Logistic Regression model
+model=LogisticRegression()  # # max_iter to ensure convergence
+model.fit(X_train,y_train)  # Learn coefficients from training data
+
+# 8) Make predictions on the test set
+y_pred=model.predict(X_test)          ## Predicted class labels (0/1) for test set
+y_prob = model.predict_proba(X_test)[:, 1]# Predicted probability of class '1' (survived)
+
+# 9) Evaluation – Accuracy, Confusion Matrix, Classification Report
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+class_report = classification_report(y_test, y_pred)
+
+print("Accuracy:", accuracy)
+print("Confusion Matrix:\n", conf_matrix)
+print("Classification Report:\n", class_report)
+
+# 10) ROC Curve & AUC
+
+# ROC: TPR vs FPR at different probability thresholds.
+# AUC: Area under that ROC curve (1.0 is perfect; 0.5 is random).
+fpr, tpr, thresholds = roc_curve(y_test, y_prob)  # Points for ROC curve
+roc_auc = auc(fpr, tpr)                           # Compute AUC
+plt.figure()
+plt.plot(fpr, tpr, label=f"ROC curve (AUC = {roc_auc:.2f})")  # The ROC line
+plt.plot([0, 1], [0, 1], linestyle="--")                      # Diagonal = random guess
+plt.xlabel("False Positive Rate")
+plt.ylabel("True Positive Rate")
+plt.title("ROC Curve - Logistic Regression (Titanic)")
+plt.legend(loc="lower right")
+plt.show()
