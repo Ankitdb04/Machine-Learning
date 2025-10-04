@@ -1,0 +1,168 @@
+
+# ============================================
+# 📦 1. Import required libraries
+# ============================================
+import pandas as pd
+import numpy as np
+import re
+from sklearn.model_selection import train_test_split
+from sklearn.feature_extraction.text import CountVectorizer
+from sklearn.naive_bayes import MultinomialNB
+from sklearn.pipeline import make_pipeline
+from sklearn import metrics
+import matplotlib.pyplot as plt
+
+# ============================================
+# 📂 2. Load the dataset
+# ============================================
+
+# 👇 Change this path if your dataset is stored elsewhere
+csv_path = "/content/ecommerceDataset.csv"   # Upload your dataset in Colab Files first
+df = pd.read_csv(csv_path)
+
+print(f"✅ Loaded dataset with shape: {df.shape}")
+print("📋 Columns:", list(df.columns))
+print("\n🔍 Dataset preview:")
+print(df.head(10))
+
+# ============================================
+# 🧩 3. Detect text and label columns automatically
+# ============================================
+text_cols = [c for c in df.columns if df[c].dtype == "object"]
+text_candidate = None
+
+if len(text_cols) > 0:
+    avg_tokens = {}
+    for c in text_cols:
+        s = df[c].fillna("").astype(str)
+        avg_tokens[c] = (s.str.split().str.len().replace(np.nan, 0)).mean()
+    text_candidate = max(avg_tokens, key=avg_tokens.get)
+else:
+    text_candidate = None
+
+label_candidate = None
+for c in df.columns:
+    nunique = df[c].nunique(dropna=True)
+    na_frac = df[c].isna().mean()
+    if nunique > 1 and nunique <= 200 and na_frac < 0.5:
+        label_candidate = c
+        break
+
+print("\n🧠 Auto-detected text column:", text_candidate)
+print("🏷️ Auto-detected label column:", label_candidate)
+
+if text_candidate is None or label_candidate is None:
+    raise ValueError("Could not auto-detect text/label columns. Please specify manually.")
+
+# ============================================
+# 🧼 4. Keep only text + label columns & clean text
+# ============================================
+df2 = df[[text_candidate, label_candidate]].copy()
+df2 = df2.rename(columns={text_candidate: "text", label_candidate: "label"})
+df2 = df2.dropna(subset=["text", "label"])
+
+print(f"\n✅ Rows after dropping missing values: {len(df2)}")
+
+# Convert numeric label → categorical if needed
+if pd.api.types.is_numeric_dtype(df2['label']):
+    nunique = df2['label'].nunique()
+    print(f"Label column is numeric with {nunique} unique values.")
+    if nunique > 50:
+        df2['label'] = pd.qcut(df2['label'], q=3, labels=["low", "medium", "high"])
+        print("Converted numeric label into 3 bins: low, medium, high.")
+    else:
+        df2['label'] = df2['label'].astype(str)
+
+print("\n🏷️ Label distribution:")
+print(df2['label'].value_counts().head(10))
+
+# Basic text cleaning
+def basic_clean(text):
+    text = str(text).lower()
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = re.sub(r'[^a-z0-9\s]', ' ', text)
+    text = re.sub(r'\s+', ' ', text).strip()
+    return text
+
+df2['text_clean'] = df2['text'].astype(str).apply(basic_clean)
+
+print("\n🧽 Cleaned text preview:")
+print(df2[['text_clean', 'label']].head(10))
+
+# ============================================
+# 🔀 5. Train-test split
+# ============================================
+X = df2['text_clean'].values
+y = df2['label'].values
+
+stratify_arg = y if len(np.unique(y)) > 1 and np.min(np.unique(y, return_counts=True)[1]) >= 2 else None
+X_train, X_test, y_train, y_test = train_test_split(
+    X, y, test_size=0.2, random_state=42, stratify=stratify_arg
+)
+
+print(f"\n📊 Train size: {len(X_train)}, Test size: {len(X_test)}")
+
+# ============================================
+# 🧠 6. Build pipeline: CountVectorizer + MultinomialNB
+# ============================================
+vectorizer = CountVectorizer(stop_words='english', min_df=2)
+clf = MultinomialNB(alpha=1.0)
+pipeline = make_pipeline(vectorizer, clf)
+
+pipeline.fit(X_train, y_train)
+print("\n🚀 Model training complete!")
+
+# ============================================
+# 🧾 7. Evaluation
+# ============================================
+y_pred = pipeline.predict(X_test)
+
+acc = metrics.accuracy_score(y_test, y_pred)
+print(f"\n🎯 Test Accuracy: {acc:.4f}")
+print("\n📑 Classification Report:")
+print(metrics.classification_report(y_test, y_pred, zero_division=0))
+
+# Confusion Matrix
+cm = metrics.confusion_matrix(y_test, y_pred, labels=np.unique(y_test))
+labels_order = np.unique(y_test)
+fig, ax = plt.subplots(figsize=(6,6))
+im = ax.imshow(cm, interpolation='nearest', cmap='Blues')
+ax.set_title('Confusion Matrix')
+ax.set_xlabel('Predicted')
+ax.set_ylabel('True')
+ax.set_xticks(np.arange(len(labels_order)))
+ax.set_yticks(np.arange(len(labels_order)))
+ax.set_xticklabels(labels_order, rotation=45, ha='right')
+ax.set_yticklabels(labels_order)
+
+# Add counts inside cells
+for i in range(cm.shape[0]):
+    for j in range(cm.shape[1]):
+        ax.text(j, i, cm[i, j], ha="center", va="center", color="black")
+plt.tight_layout()
+plt.show()
+
+# ============================================
+# 🔤 8. Show top words per class
+# ============================================
+feature_names = pipeline.named_steps['countvectorizer'].get_feature_names_out()
+class_labels = pipeline.named_steps['multinomialnb'].classes_
+feature_log_prob = pipeline.named_steps['multinomialnb'].feature_log_prob_
+
+topn = 10
+print("\n🌟 Top 10 words per class:")
+for i, cls in enumerate(class_labels):
+    topn_ids = np.argsort(feature_log_prob[i])[-topn:][::-1]
+    top_features = feature_names[topn_ids]
+    print(f"\nClass '{cls}': {list(top_features)}")
+
+# ============================================
+# 🔍 9. Show sample predictions
+# ============================================
+sample_df = pd.DataFrame({
+    "Text": X_test[:10],
+    "True Label": y_test[:10],
+    "Predicted": y_pred[:10]
+})
+print("\n🔎 Sample Predictions (first 10 test examples):")
+print(sample_df)
